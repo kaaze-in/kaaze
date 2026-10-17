@@ -18,14 +18,6 @@
       "service": "kaaze"
     }
   ],
-  "r2_buckets": [
-    {
-      // R2 bucket for incremental cache (ISR / Next.js data cache)
-      // Bucket can be created via: npx wrangler r2 bucket create kaaze-inc-cache
-      "binding": "NEXT_INC_CACHE_R2_BUCKET",
-      "bucket_name": "kaaze-inc-cache"
-    }
-  ],
   "images": {
     // Cloudflare Images binding for Next.js image optimization
     "binding": "IMAGES"

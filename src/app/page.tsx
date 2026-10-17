@@ -70,7 +70,7 @@ export default function HomePage() {
                   style={{ fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '0.08em' }}
                   className="block mt-2 font-bold"
                 >
-                  KAAZE
+                  KAAZEe
                 </span>
               </h1>
               <div className="mt-space-md max-w-2xl">
