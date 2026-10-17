@@ -36,7 +36,7 @@ export const Header: React.FC = () => {
                 style={{ fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '0.12em' }}
                 className="font-headline-md text-headline-md tracking-widest text-primary uppercase font-bold"
               >
-                KAAZE
+                KAAZE.
               </span>
             </Link>
 
