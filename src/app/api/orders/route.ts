@@ -6,7 +6,7 @@ const SHOPIFY_STORE_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN || '';
 const SHOPIFY_ADMIN_API_ACCESS_TOKEN = process.env.SHOPIFY_ADMIN_API_ACCESS_TOKEN || '';
 const SHOPIFY_API_VERSION = '2024-04';
 
-export const isShopifyAdminConfigured: boolean = Boolean(
+const isShopifyAdminConfigured: boolean = Boolean(
   SHOPIFY_STORE_DOMAIN &&
   SHOPIFY_ADMIN_API_ACCESS_TOKEN &&
   !SHOPIFY_STORE_DOMAIN.includes('your-store-name') &&

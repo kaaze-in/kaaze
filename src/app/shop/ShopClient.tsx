@@ -21,7 +21,10 @@ export const ShopClient: React.FC<ShopClientProps> = ({ initialProducts }) => {
     initialProducts && initialProducts.length > 0 ? initialProducts : PRODUCTS
   );
 
-  const initialCat = (searchParams.get('category')?.toLowerCase() as CategoryType) || 'all';
+  const rawCat = searchParams.get('category')?.toLowerCase() as CategoryType;
+  const initialCat = ['all', 'clothing', 'shoes', 'watches', 'accessories'].includes(rawCat)
+    ? rawCat
+    : 'all';
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>(initialCat);
   const [sortOption, setSortOption] = useState<SortType>('newest');
   const [isSortOpen, setIsSortOpen] = useState<boolean>(false);
@@ -45,6 +48,8 @@ export const ShopClient: React.FC<ShopClientProps> = ({ initialProducts }) => {
     const cat = searchParams.get('category')?.toLowerCase() as CategoryType;
     if (cat && ['all', 'clothing', 'shoes', 'watches', 'accessories'].includes(cat)) {
       setSelectedCategory(cat);
+    } else {
+      setSelectedCategory('all');
     }
   }, [searchParams]);
 

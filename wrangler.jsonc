@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kaaze",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      // Self-reference service binding for revalidation & caching
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "kaaze"
+    }
+  ],
+  "r2_buckets": [
+    {
+      // R2 bucket for incremental cache (ISR / Next.js data cache)
+      // Bucket can be created via: npx wrangler r2 bucket create kaaze-inc-cache
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "kaaze-inc-cache"
+    }
+  ],
+  "images": {
+    // Cloudflare Images binding for Next.js image optimization
+    "binding": "IMAGES"
+  }
+}

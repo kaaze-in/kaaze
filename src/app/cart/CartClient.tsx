@@ -690,7 +690,7 @@ export const CartClient: React.FC = () => {
                       return;
                     }
                     window.location.href = checkoutUrl;
-                  } catch (err) {
+                  } catch {
                     setCheckoutError('Failed to initialize checkout. Please try again.');
                   } finally {
                     setIsCheckingOut(false);
