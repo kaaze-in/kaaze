@@ -21,5 +21,8 @@
   "images": {
     // Cloudflare Images binding for Next.js image optimization
     "binding": "IMAGES"
+  },
+  "vars": {
+    "NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN": "kaaze-etdn.myshopify.com"
   }
 }

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Order, OrderItem } from '@/types';
 import { getSupabase } from '@/lib/supabase';
 
-const SHOPIFY_STORE_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN || '';
+const rawStoreDomain = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN || '';
+const SHOPIFY_STORE_DOMAIN = rawStoreDomain.replace(/^https?:\/\//i, '').replace(/\/+$/, '').trim();
 const SHOPIFY_ADMIN_API_ACCESS_TOKEN = process.env.SHOPIFY_ADMIN_API_ACCESS_TOKEN || '';
 const SHOPIFY_API_VERSION = '2024-04';
 
