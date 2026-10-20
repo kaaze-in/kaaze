@@ -9,6 +9,9 @@ export const metadata: Metadata = {
     'Explore the complete KAAZE directory: Clothing, Shoes, Watches, and Accessories. Architectural brutalism in everyday staples.',
 };
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function ShopPage() {
   const initialProducts = await getProducts();
 

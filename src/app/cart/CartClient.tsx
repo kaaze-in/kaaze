@@ -4,8 +4,13 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { PRODUCTS } from '@/lib/data';
+import { Product } from '@/types';
 
-export const CartClient: React.FC = () => {
+interface CartClientProps {
+  recommendedProducts?: Product[];
+}
+
+export const CartClient: React.FC<CartClientProps> = ({ recommendedProducts }) => {
   const {
     items,
     itemCount,
@@ -56,7 +61,10 @@ export const CartClient: React.FC = () => {
     'tactical-modular-harness-crossbody',
   ];
 
-  const recommendations = PRODUCTS.filter((p) => recommendationHandles.includes(p.handle));
+  const recommendations =
+    recommendedProducts && recommendedProducts.length > 0
+      ? recommendedProducts
+      : PRODUCTS.filter((p) => recommendationHandles.includes(p.handle));
 
   const percentFreeShipping = Math.min(100, Math.round((subtotal / freeShippingThreshold) * 100));
 

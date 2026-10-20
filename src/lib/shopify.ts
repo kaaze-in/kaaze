@@ -1,28 +1,81 @@
-import { Product, ProductColor, ProductImage, ProductVariant, Order, CustomerProfile } from '@/types';
+import { Product, ProductColor, ProductImage, ProductVariant, Order, CustomerProfile, ShopifyCollectionItem } from '@/types';
 import { PRODUCTS, MOCK_ORDERS, MOCK_CUSTOMER } from './data';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 // -----------------------------------------------------------------------------
 // Configuration & Helpers
 // -----------------------------------------------------------------------------
 
+/**
+ * Safely resolves an environment variable at runtime.
+ * Prioritizes the Cloudflare Worker runtime execution context (getCloudflareContext().env),
+ * then falls back to dynamic process.env lookup for local development or Node runtimes.
+ */
+function getEnvValue(keys: string[]): string {
+  // 1. Prioritize Cloudflare Worker runtime context (bindings & secrets)
+  try {
+    const cf = getCloudflareContext();
+    if (cf && cf.env) {
+      const cfEnv = cf.env as Record<string, unknown>;
+      for (const key of keys) {
+        const val = cfEnv[key];
+        if (typeof val === 'string' && val.trim().length > 0) {
+          return val.trim();
+        }
+      }
+    }
+  } catch {
+    // getCloudflareContext throws during SSG / build-time or outside request context
+  }
+
+  // 2. Fall back to dynamic process.env lookup (bracket notation prevents Next.js build-time inlining)
+  if (typeof process !== 'undefined' && process.env) {
+    const procEnv = process.env as Record<string, string | undefined>;
+    for (const key of keys) {
+      const val = procEnv[key];
+      if (typeof val === 'string' && val.trim().length > 0) {
+        return val.trim();
+      }
+    }
+  }
+
+  return '';
+}
+
 export function getShopifyDomain(): string {
-  const raw = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN || '';
+  const raw = getEnvValue([
+    'NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN',
+    'SHOPIFY_STORE_DOMAIN',
+  ]);
   return raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '').trim();
 }
 
 export function getShopifyStorefrontToken(): string {
-  return (process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN || '').trim();
+  return getEnvValue([
+    'NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN',
+    'SHOPIFY_STOREFRONT_ACCESS_TOKEN',
+  ]);
 }
 
 export const SHOPIFY_API_VERSION = '2024-04';
 
-export const isShopifyConfigured: boolean = Boolean(
-  getShopifyDomain() &&
-  getShopifyStorefrontToken() &&
-  !getShopifyDomain().includes('your-store-name') &&
-  !getShopifyStorefrontToken().includes('your_token') &&
-  getShopifyStorefrontToken().length >= 10
-);
+export function checkShopifyConfigured(): boolean {
+  const domain = getShopifyDomain();
+  const token = getShopifyStorefrontToken();
+  return Boolean(
+    domain &&
+    token &&
+    !domain.includes('your-store-name') &&
+    !token.includes('your_token') &&
+    token.length >= 10
+  );
+}
+
+// Backward-compatible function export
+export function isShopifyConfigured(): boolean {
+  return checkShopifyConfigured();
+}
+
 
 // Map common color names to clean hex values for UI swatches
 const COLOR_HEX_MAP: Record<string, string> = {
@@ -59,12 +112,30 @@ function getColorHex(name: string): string {
 /**
  * Categorize Shopify products into the four existing KAAZE categories:
  * 'clothing' | 'shoes' | 'watches' | 'accessories'
+ * Prioritizes actual Shopify collection membership handles.
  */
 export function determineCategory(
   productType = '',
   tags: string[] = [],
-  title = ''
+  title = '',
+  collectionHandles: string[] = []
 ): 'clothing' | 'shoes' | 'watches' | 'accessories' {
+  const lowerHandles = collectionHandles.map((h) => h.toLowerCase());
+
+  // Check Shopify collections first (exact match to user's Shopify collection handles)
+  if (lowerHandles.includes('watches') || lowerHandles.includes('watch')) {
+    return 'watches';
+  }
+  if (lowerHandles.includes('shoes') || lowerHandles.includes('shoe') || lowerHandles.includes('footwear')) {
+    return 'shoes';
+  }
+  if (lowerHandles.includes('accessories') || lowerHandles.includes('accessory')) {
+    return 'accessories';
+  }
+  if (lowerHandles.includes('clothing') || lowerHandles.includes('clothes') || lowerHandles.includes('apparel')) {
+    return 'clothing';
+  }
+
   const combined = `${productType} ${tags.join(' ')} ${title}`.toLowerCase();
 
   // 1. Watches
@@ -122,11 +193,14 @@ export function determineCategory(
   return 'clothing';
 }
 
+import { productMatchesCategory } from './categories';
+export { productMatchesCategory };
+
 // -----------------------------------------------------------------------------
 // GraphQL Queries
 // -----------------------------------------------------------------------------
 
-const PRODUCTS_GRAPHQL_QUERY = `
+export const PRODUCTS_GRAPHQL_QUERY = `
   query getProducts($first: Int = 100, $query: String) {
     products(first: $first, query: $query) {
       edges {
@@ -164,6 +238,15 @@ const PRODUCTS_GRAPHQL_QUERY = `
             id
             name
             values
+          }
+          collections(first: 10) {
+            edges {
+              node {
+                id
+                title
+                handle
+              }
+            }
           }
           variants(first: 50) {
             edges {
@@ -234,6 +317,15 @@ const PRODUCT_BY_HANDLE_GRAPHQL_QUERY = `
         name
         values
       }
+      collections(first: 10) {
+        edges {
+          node {
+            id
+            title
+            handle
+          }
+        }
+      }
       variants(first: 50) {
         edges {
           node {
@@ -271,10 +363,63 @@ const CART_CREATE_MUTATION = `
         id
         checkoutUrl
         totalQuantity
+        lines(first: 10) {
+          edges {
+            node {
+              quantity
+              merchandise {
+                ... on ProductVariant {
+                  id
+                  title
+                  availableForSale
+                }
+              }
+            }
+          }
+        }
       }
       userErrors {
         field
         message
+      }
+    }
+  }
+`;
+
+export const SHOP_SHIPPING_QUERY = `
+  query getShopShippingContext {
+    shop {
+      shipsToCountries
+      paymentSettings {
+        countryCode
+      }
+    }
+  }
+`;
+
+export const COLLECTIONS_GRAPHQL_QUERY = `
+  query getCollections($first: Int = 20) {
+    collections(first: $first) {
+      edges {
+        node {
+          id
+          title
+          handle
+          description
+          image {
+            url
+            altText
+          }
+          products(first: 50) {
+            edges {
+              node {
+                id
+                handle
+                title
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -287,7 +432,7 @@ const CART_CREATE_MUTATION = `
 export async function shopifyFetch<T>({
   query,
   variables,
-  revalidate = 60,
+  revalidate = 0,
 }: {
   query: string;
   variables?: Record<string, unknown>;
@@ -303,15 +448,22 @@ export async function shopifyFetch<T>({
   const endpoint = `https://${domain}/api/${SHOPIFY_API_VERSION}/graphql.json`;
 
   try {
-    const response = await fetch(endpoint, {
+    const fetchOptions: RequestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Shopify-Storefront-Access-Token': token,
       },
       body: JSON.stringify({ query, variables }),
-      next: { revalidate },
-    });
+    };
+
+    if (revalidate === 0) {
+      fetchOptions.cache = 'no-store';
+    } else {
+      (fetchOptions as any).next = { revalidate };
+    }
+
+    const response = await fetch(endpoint, fetchOptions);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -415,13 +567,28 @@ export function transformShopifyProduct(node: any): Product {
   if (sizeOption && sizeOption.values?.length > 0) {
     sizes = sizeOption.values.map((v: string) => v.toUpperCase());
   } else if (variants.length > 0) {
-    sizes = Array.from(new Set(variants.map((v) => v.title.toUpperCase())));
+    const customTitles = variants
+      .map((v) => v.title.trim())
+      .filter((t) => t.toLowerCase() !== 'default title');
+    if (customTitles.length > 0) {
+      sizes = Array.from(new Set(customTitles.map((v) => v.toUpperCase())));
+    }
   }
   if (sizes.length === 0) {
     sizes = ['OS'];
   }
 
-  const category = determineCategory(node.productType, node.tags || [], node.title);
+  // Extract collection memberships
+  const rawCollections = (node.collections?.edges || []).map(
+    (e: { node: { id: string; title: string; handle: string } }) => ({
+      id: e.node.id,
+      title: e.node.title,
+      handle: (e.node.handle || '').toLowerCase().trim(),
+    })
+  );
+  const collectionHandles = rawCollections.map((c: { handle: string }) => c.handle);
+
+  const category = determineCategory(node.productType, node.tags || [], node.title, collectionHandles);
   const firstVariantSku = variants[0]?.sku;
 
   return {
@@ -436,6 +603,8 @@ export function transformShopifyProduct(node: any): Product {
     compareAtPrice,
     discountBadge,
     category,
+    collections: rawCollections,
+    collectionHandles,
     collectionTag: node.productType ? node.productType.toUpperCase() : 'CORE EDTN',
     seriesTag: 'KAAZE // STOREFRONT',
     stockStatus: node.availableForSale ? 'ALLOCATION ACTIVE' : 'ARCHIVED // SOLD OUT',
@@ -474,19 +643,67 @@ export async function getProducts(category?: string): Promise<Product[]> {
     if (res.data?.products?.edges && res.data.products.edges.length > 0) {
       const liveProducts = res.data.products.edges.map((e) => transformShopifyProduct(e.node));
       if (category && category !== 'all') {
-        return liveProducts.filter((p) => p.category.toLowerCase() === category.toLowerCase());
+        return liveProducts.filter((p) => productMatchesCategory(p, category));
       }
       return liveProducts;
+    }
+
+    if (res.error) {
+      console.warn('Shopify products fetch failed:', res.error);
     }
   } catch (err) {
     console.warn('Shopify products fetch failed, using fallback catalogue:', err);
   }
 
-  // Graceful fallback to preserve UI when Shopify Storefront token is pending
-  if (category && category !== 'all') {
-    return PRODUCTS.filter((p) => p.category.toLowerCase() === category.toLowerCase());
+  // Graceful fallback to preserve UI when Shopify Storefront is not configured (e.g. local dev)
+  if (!checkShopifyConfigured()) {
+    if (category && category !== 'all') {
+      return PRODUCTS.filter((p) => productMatchesCategory(p, category));
+    }
+    return PRODUCTS;
   }
-  return PRODUCTS;
+
+  return [];
+}
+
+/**
+ * Fetch all collections directly from Shopify Storefront API.
+ */
+export async function getShopifyCollections(): Promise<ShopifyCollectionItem[]> {
+  try {
+    const res = await shopifyFetch<{
+      collections: {
+        edges: {
+          node: {
+            id: string;
+            title: string;
+            handle: string;
+            description?: string;
+            image?: { url: string; altText?: string };
+            products: { edges: { node: { id: string; handle: string; title: string } }[] };
+          };
+        }[];
+      };
+    }>({
+      query: COLLECTIONS_GRAPHQL_QUERY,
+    });
+
+    if (res.data?.collections?.edges) {
+      return res.data.collections.edges.map((e) => ({
+        id: e.node.id,
+        title: e.node.title,
+        handle: e.node.handle.toLowerCase().trim(),
+        description: e.node.description || '',
+        productCount: e.node.products?.edges?.length || 0,
+        productHandles: (e.node.products?.edges || []).map((p) => p.node.handle),
+        imageUrl: e.node.image?.url,
+      }));
+    }
+  } catch (err) {
+    console.warn('Shopify collections fetch failed:', err);
+  }
+
+  return [];
 }
 
 /**
@@ -544,7 +761,7 @@ export async function createShopifyCheckout(
   }
 
   // 1. Attempt Storefront API cartCreate mutation
-  if (isShopifyConfigured) {
+  if (checkShopifyConfigured()) {
     try {
       // Format lines with GID if not already formatted
       const formattedLines = lines.map((l) => {
@@ -554,30 +771,70 @@ export async function createShopifyCheckout(
         }
         return {
           merchandiseId,
-          quantity: l.quantity,
+          quantity: Math.max(1, l.quantity || 1),
         };
       });
 
+      // Resolve store's active shipping market country for inventory validation
+      let buyerCountry: string | undefined = undefined;
+      try {
+        const shopRes = await shopifyFetch<{
+          shop: {
+            shipsToCountries: string[];
+            paymentSettings: { countryCode: string };
+          };
+        }>({ query: SHOP_SHIPPING_QUERY });
+        const shipsTo = shopRes.data?.shop?.shipsToCountries || [];
+        const defaultCountry = shopRes.data?.shop?.paymentSettings?.countryCode || 'IN';
+        if (shipsTo.length > 0) {
+          buyerCountry = shipsTo.includes(defaultCountry)
+            ? defaultCountry
+            : shipsTo.includes('US')
+            ? 'US'
+            : shipsTo[0];
+        }
+      } catch (shopErr) {
+        console.warn('Failed to resolve shop shipping country:', shopErr);
+      }
+
+      const cartInput: Record<string, unknown> = {
+        lines: formattedLines,
+      };
+      if (buyerCountry) {
+        cartInput.buyerIdentity = { countryCode: buyerCountry };
+      }
+
       const res = await shopifyFetch<{
         cartCreate: {
-          cart?: { id: string; checkoutUrl: string };
+          cart?: {
+            id: string;
+            checkoutUrl: string;
+            totalQuantity?: number;
+          };
           userErrors?: { field: string; message: string }[];
         };
       }>({
         query: CART_CREATE_MUTATION,
         variables: {
-          input: {
-            lines: formattedLines,
-          },
+          input: cartInput,
         },
       });
 
-      if (res.data?.cartCreate?.cart?.checkoutUrl) {
-        return { checkoutUrl: res.data.cartCreate.cart.checkoutUrl };
+      const cart = res.data?.cartCreate?.cart;
+
+      // Ensure the cart has items successfully allocated (totalQuantity > 0).
+      // If totalQuantity === 0, Shopify rejected item allocation (e.g. unconfigured fulfillment location).
+      if (cart?.checkoutUrl && (cart?.totalQuantity ?? 0) > 0) {
+        return { checkoutUrl: cart.checkoutUrl };
       }
 
       if (res.data?.cartCreate?.userErrors && res.data.cartCreate.userErrors.length > 0) {
-        console.warn('Shopify cartCreate userErrors:', res.data.cartCreate.userErrors);
+        const errorMsg = res.data.cartCreate.userErrors.map((e) => e.message).join('; ');
+        console.warn('Shopify cartCreate userErrors:', errorMsg);
+      }
+
+      if (res.error) {
+        console.warn('Shopify cartCreate error:', res.error);
       }
     } catch (apiErr) {
       console.warn('Shopify cartCreate mutation note:', apiErr);
@@ -588,7 +845,7 @@ export async function createShopifyCheckout(
       const permalinkParts = lines
         .map((l) => {
           const numId = l.variantId.replace(/\D/g, '') || l.variantId;
-          return `${numId}:${l.quantity}`;
+          return `${numId}:${Math.max(1, l.quantity || 1)}`;
         })
         .join(',');
       return { checkoutUrl: `https://${domain}/cart/${permalinkParts}` };

@@ -93,6 +93,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, variant = 'ca
     <article
       className="product-item group flex flex-col justify-between bg-surface border border-surface-container hover:border-primary/40 transition-all duration-150 relative h-full p-1 sm:p-2 md:p-3 overflow-hidden"
       data-category={product.category}
+      data-collections={(product.collectionHandles || []).join(' ')}
       data-price={product.price}
       data-product-handle={product.handle}
     >

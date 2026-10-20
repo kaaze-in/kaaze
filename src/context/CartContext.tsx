@@ -25,7 +25,7 @@ interface CartContextType {
   isCustomEmptyOverride: boolean;
   toggleMockState: (target: 'populated' | 'empty') => void;
   isCartSyncing: boolean;
-  createCheckoutUrl: () => Promise<string>;
+  createCheckoutUrl: (customItems?: CartItem[]) => Promise<string>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -70,7 +70,7 @@ const DEFAULT_INITIAL_ITEMS: CartItem[] = [
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [items, setItems] = useState<CartItem[]>(DEFAULT_INITIAL_ITEMS);
+  const [items, setItems] = useState<CartItem[]>([]);
   const [discountCode, setDiscountCode] = useState<string | null>(null);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [isCustomEmptyOverride, setIsCustomEmptyOverride] = useState<boolean>(false);
@@ -86,7 +86,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (stored) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setItems(parsed);
+            // Filter out legacy mock demo items from initial local storage
+            const activeItems = parsed.filter(
+              (item: CartItem) =>
+                item.productId !== 'kz-tee-001' &&
+                item.productId !== 'kz-crg-003' &&
+                !item.lineId.includes('l-01-tee') &&
+                !item.lineId.includes('l-02-cargo')
+            );
+            if (activeItems.length > 0) {
+              setItems(activeItems);
+            }
           }
         }
       } catch (e) {
@@ -270,25 +280,27 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Match variant from product if variantId not directly supplied
     const matchedVariant =
-      product.variants?.find((v) => {
-        const matchesSize =
-          !size ||
-          v.selectedOptions?.some(
-            (o) => o.name.toLowerCase() === 'size' && o.value.toLowerCase() === size.toLowerCase()
-          ) ||
-          v.title.toLowerCase().includes(size.toLowerCase());
+      product.variants?.length === 1 && product.variants[0].title.toLowerCase() === 'default title'
+        ? product.variants[0]
+        : product.variants?.find((v) => {
+            const matchesSize =
+              !size ||
+              v.selectedOptions?.some(
+                (o) => o.name.toLowerCase() === 'size' && o.value.toLowerCase() === size.toLowerCase()
+              ) ||
+              v.title.toLowerCase().includes(size.toLowerCase());
 
-        const matchesColor =
-          !chosenColor ||
-          v.selectedOptions?.some(
-            (o) =>
-              (o.name.toLowerCase() === 'color' || o.name.toLowerCase() === 'colour') &&
-              o.value.toLowerCase() === chosenColor.toLowerCase()
-          ) ||
-          v.title.toLowerCase().includes(chosenColor.toLowerCase());
+            const matchesColor =
+              !chosenColor ||
+              v.selectedOptions?.some(
+                (o) =>
+                  (o.name.toLowerCase() === 'color' || o.name.toLowerCase() === 'colour') &&
+                  o.value.toLowerCase() === chosenColor.toLowerCase()
+              ) ||
+              v.title.toLowerCase().includes(chosenColor.toLowerCase());
 
-        return matchesSize && matchesColor;
-      }) || product.variants?.[0];
+            return matchesSize && matchesColor;
+          }) || product.variants?.[0];
 
     const resolvedVariantId = variantId || matchedVariant?.id;
     const lineId = resolvedVariantId
@@ -331,21 +343,22 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const createCheckoutUrl = async (): Promise<string> => {
+  const createCheckoutUrl = async (customItems?: CartItem[]): Promise<string> => {
     try {
+      const activeItems = customItems || items;
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items: activeItems }),
       });
       const data = await res.json();
-      if (data.checkoutUrl) {
+      if (data.checkoutUrl && data.checkoutUrl !== '/cart') {
         return data.checkoutUrl;
       }
       throw new Error(data.error || 'Failed to generate checkout URL');
     } catch (err) {
       console.error('Error in createCheckoutUrl:', err);
-      return '/cart';
+      throw err;
     }
   };
 

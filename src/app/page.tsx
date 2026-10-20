@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { PRODUCTS } from '@/lib/data';
 import { Product } from '@/types';
 import { ProductCard } from '@/components/ProductCard';
+import { productMatchesCategory } from '@/lib/categories';
 
 export default function HomePage() {
-  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [newsletterSubmitted, setNewsletterSubmitted] = useState<boolean>(false);
   const [emailInput, setEmailInput] = useState<string>('');
@@ -18,9 +20,16 @@ export default function HomePage() {
       .then((data) => {
         if (data.products && data.products.length > 0) {
           setProducts(data.products);
+        } else if (!data.isLiveShopify) {
+          setProducts(PRODUCTS);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setProducts(PRODUCTS);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
   const filterCategories = [
@@ -34,7 +43,7 @@ export default function HomePage() {
   const filteredProducts =
     activeCategory === 'all'
       ? products.slice(0, 4)
-      : products.filter((p) => p.category === activeCategory).slice(0, 4);
+      : products.filter((p) => productMatchesCategory(p, activeCategory)).slice(0, 4);
 
   const handleNewsletterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,11 +143,28 @@ export default function HomePage() {
         </div>
 
         {/* 4-Card Editorial Product Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter-desktop">
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} variant="lineup" />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter-desktop">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[3/4] bg-surface-container-lowest border border-surface-container animate-pulse flex items-center justify-center font-mono text-label-sm text-outline"
+              >
+                [ ALLOCATING ARTIFACT 0{i + 1} ]
+              </div>
+            ))}
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="w-full py-space-xl text-center font-label-md text-outline uppercase tracking-widest font-mono">
+            [ NO ARTIFACTS ALLOCATED FOR THIS FILTER SPECIFICATION ]
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter-desktop">
+            {filteredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} variant="lineup" />
+            ))}
+          </div>
+        )}
 
         {/* Explore all link */}
         <div className="mt-space-lg text-center pt-space-md border-t border-surface-container">

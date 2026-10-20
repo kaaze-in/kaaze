@@ -34,6 +34,7 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
     fit: false,
     dispatch: false,
   });
+  const [isDirectCheckingOut, setIsDirectCheckingOut] = useState<boolean>(false);
 
   const toggleAccordion = (key: string) => {
     setOpenAccordions((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -41,25 +42,27 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
 
   // Match active Shopify variant
   const matchingVariant =
-    product.variants?.find((v) => {
-      const matchesSize =
-        !selectedSize ||
-        v.selectedOptions?.some(
-          (o) => o.name.toLowerCase() === 'size' && o.value.toLowerCase() === selectedSize.toLowerCase()
-        ) ||
-        v.title.toLowerCase().includes(selectedSize.toLowerCase());
+    product.variants?.length === 1 && product.variants[0].title.toLowerCase() === 'default title'
+      ? product.variants[0]
+      : product.variants?.find((v) => {
+          const matchesSize =
+            !selectedSize ||
+            v.selectedOptions?.some(
+              (o) => o.name.toLowerCase() === 'size' && o.value.toLowerCase() === selectedSize.toLowerCase()
+            ) ||
+            v.title.toLowerCase().includes(selectedSize.toLowerCase());
 
-      const matchesColor =
-        !selectedColor ||
-        v.selectedOptions?.some(
-          (o) =>
-            (o.name.toLowerCase() === 'color' || o.name.toLowerCase() === 'colour') &&
-            o.value.toLowerCase() === selectedColor.toLowerCase()
-        ) ||
-        v.title.toLowerCase().includes(selectedColor.toLowerCase());
+          const matchesColor =
+            !selectedColor ||
+            v.selectedOptions?.some(
+              (o) =>
+                (o.name.toLowerCase() === 'color' || o.name.toLowerCase() === 'colour') &&
+                o.value.toLowerCase() === selectedColor.toLowerCase()
+            ) ||
+            v.title.toLowerCase().includes(selectedColor.toLowerCase());
 
-      return matchesSize && matchesColor;
-    }) || product.variants?.[0];
+          return matchesSize && matchesColor;
+        }) || product.variants?.[0];
 
   const currentPrice = matchingVariant?.price || product.price;
   const currentCompareAtPrice = matchingVariant?.compareAtPrice || product.compareAtPrice;
@@ -72,10 +75,52 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
     setTimeout(() => setAddedToast(false), 2500);
   };
 
-  const handleDirectCheckout = () => {
+  const handleDirectCheckout = async () => {
     if (!isAvailable) return;
-    addToCart(product, selectedSize, selectedColor, quantity, matchingVariant?.id);
-    router.push('/cart');
+    const resolvedVariantId = matchingVariant?.id || product.variants?.[0]?.id;
+    if (!resolvedVariantId) {
+      addToCart(product, selectedSize, selectedColor, quantity);
+      router.push('/cart');
+      return;
+    }
+
+    try {
+      setIsDirectCheckingOut(true);
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: product.id,
+              variantId: resolvedVariantId,
+              handle: product.handle,
+              title: product.title,
+              price: currentPrice,
+              quantity,
+              selectedSize,
+              selectedColor,
+            },
+          ],
+        }),
+      });
+
+      const data = await res.json();
+      if (data.checkoutUrl && (data.checkoutUrl.startsWith('http') || data.checkoutUrl.startsWith('https'))) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // If direct checkout URL wasn't returned, add to cart and fallback to cart page
+      addToCart(product, selectedSize, selectedColor, quantity, resolvedVariantId);
+      router.push('/cart');
+    } catch (err) {
+      console.warn('Direct checkout fallback to cart:', err);
+      addToCart(product, selectedSize, selectedColor, quantity, resolvedVariantId);
+      router.push('/cart');
+    } finally {
+      setIsDirectCheckingOut(false);
+    }
   };
 
   const activeImage = product.images[activeImageIndex] || product.images[0];
@@ -366,16 +411,24 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
                 {/* Direct Checkout Secondary Button */}
                 <button
                   type="button"
-                  disabled={!isAvailable}
+                  disabled={!isAvailable || isDirectCheckingOut}
                   onClick={handleDirectCheckout}
                   className={`w-full font-label-md text-label-md tracking-[0.15em] uppercase font-bold py-3.5 transition-all flex items-center justify-center gap-space-xs ${
-                    isAvailable
+                    isAvailable && !isDirectCheckingOut
                       ? 'bg-transparent text-primary border border-outline hover:border-primary hover:bg-surface-container-low cursor-pointer'
                       : 'bg-surface-container text-outline border-surface-container cursor-not-allowed opacity-60'
                   }`}
                 >
-                  <span>{isAvailable ? 'DIRECT CHECKOUT' : 'UNAVAILABLE'}</span>
-                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  <span>
+                    {isDirectCheckingOut
+                      ? 'CONNECTING TO CHECKOUT...'
+                      : isAvailable
+                      ? 'DIRECT CHECKOUT'
+                      : 'UNAVAILABLE'}
+                  </span>
+                  {!isDirectCheckingOut && (
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  )}
                 </button>
               </div>
 

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { PRODUCTS } from '@/lib/data';
 import { Product } from '@/types';
 import { ProductCard } from '@/components/ProductCard';
+import { productMatchesCategory } from '@/lib/categories';
 
 type CategoryType = 'all' | 'clothing' | 'shoes' | 'watches' | 'accessories';
 type SortType = 'newest' | 'price-asc' | 'price-desc';
@@ -18,7 +19,7 @@ export const ShopClient: React.FC<ShopClientProps> = ({ initialProducts }) => {
   const router = useRouter();
 
   const [products, setProducts] = useState<Product[]>(
-    initialProducts && initialProducts.length > 0 ? initialProducts : PRODUCTS
+    initialProducts && initialProducts.length > 0 ? initialProducts : []
   );
 
   const rawCat = searchParams.get('category')?.toLowerCase() as CategoryType;
@@ -32,16 +33,22 @@ export const ShopClient: React.FC<ShopClientProps> = ({ initialProducts }) => {
   useEffect(() => {
     if (initialProducts && initialProducts.length > 0) {
       setProducts(initialProducts);
-    } else {
-      fetch('/api/products')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.products && data.products.length > 0) {
-            setProducts(data.products);
-          }
-        })
-        .catch(() => {});
     }
+    // Sync with /api/products on client mount to ensure live collection updates
+    fetch('/api/products')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.products && data.products.length > 0) {
+          setProducts(data.products);
+        } else if (!data.isLiveShopify && (!initialProducts || initialProducts.length === 0)) {
+          setProducts(PRODUCTS);
+        }
+      })
+      .catch(() => {
+        if (!initialProducts || initialProducts.length === 0) {
+          setProducts(PRODUCTS);
+        }
+      });
   }, [initialProducts]);
 
   useEffect(() => {
@@ -62,11 +69,11 @@ export const ShopClient: React.FC<ShopClientProps> = ({ initialProducts }) => {
     }
   };
 
-  // Filter products
+  // Filter products based on Shopify collection membership
   const filtered =
     selectedCategory === 'all'
       ? [...products]
-      : products.filter((p) => p.category === selectedCategory);
+      : products.filter((p) => productMatchesCategory(p, selectedCategory));
 
   // Sort products
   if (sortOption === 'price-asc') {
@@ -75,13 +82,13 @@ export const ShopClient: React.FC<ShopClientProps> = ({ initialProducts }) => {
     filtered.sort((a, b) => b.price - a.price);
   }
 
-  // Counts for each category
+  // Live counts for each category based on actual Shopify collection membership
   const counts = {
     all: products.length,
-    clothing: products.filter((p) => p.category === 'clothing').length,
-    shoes: products.filter((p) => p.category === 'shoes').length,
-    watches: products.filter((p) => p.category === 'watches').length,
-    accessories: products.filter((p) => p.category === 'accessories').length,
+    clothing: products.filter((p) => productMatchesCategory(p, 'clothing')).length,
+    shoes: products.filter((p) => productMatchesCategory(p, 'shoes')).length,
+    watches: products.filter((p) => productMatchesCategory(p, 'watches')).length,
+    accessories: products.filter((p) => productMatchesCategory(p, 'accessories')).length,
   };
 
   const categories: { label: string; value: CategoryType; count: number }[] = [

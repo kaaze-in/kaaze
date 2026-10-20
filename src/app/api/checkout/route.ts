@@ -22,8 +22,13 @@ export async function POST(request: Request) {
     for (const item of items) {
       let resolvedVariantId = item.variantId;
 
-      // If variantId is missing, attempt to resolve from Shopify product data
-      if (!resolvedVariantId) {
+      // Ensure resolvedVariantId is a ProductVariant, not a Product
+      if (resolvedVariantId && resolvedVariantId.includes('gid://shopify/Product/') && !resolvedVariantId.includes('ProductVariant')) {
+        resolvedVariantId = undefined;
+      }
+
+      // If variantId is missing or invalid, resolve from Shopify product data
+      if (!resolvedVariantId || resolvedVariantId.startsWith('kz-') || resolvedVariantId.includes('CartLine')) {
         if (item.handle) {
           const product = await getProductByHandle(item.handle);
           if (product && product.variants && product.variants.length > 0) {
@@ -53,15 +58,20 @@ export async function POST(request: Request) {
         }
       }
 
-      // Fallback: If still no variantId, use item.productId or sanitize
-      if (!resolvedVariantId) {
-        resolvedVariantId = item.productId;
+      // Only push valid Shopify variants to checkout (exclude unresolvable mock/demo IDs)
+      if (resolvedVariantId && (resolvedVariantId.includes('ProductVariant') || /^\d+$/.test(resolvedVariantId))) {
+        checkoutLines.push({
+          variantId: resolvedVariantId,
+          quantity: Math.max(1, item.quantity || 1),
+        });
       }
+    }
 
-      checkoutLines.push({
-        variantId: resolvedVariantId,
-        quantity: Math.max(1, item.quantity),
-      });
+    if (checkoutLines.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No valid Shopify products found in cart to checkout.' },
+        { status: 400 }
+      );
     }
 
     const { checkoutUrl, error } = await createShopifyCheckout(checkoutLines);

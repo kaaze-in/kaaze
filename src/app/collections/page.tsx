@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
-import { getProducts } from '@/lib/shopify';
+import { getProducts, productMatchesCategory } from '@/lib/shopify';
 import { PRODUCTS } from '@/lib/data';
 import { ShopClient } from '../shop/ShopClient';
 import type { Metadata } from 'next';
@@ -16,6 +16,9 @@ interface CollectionsPageProps {
     category?: string;
   };
 }
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function CollectionsPage({ searchParams }: CollectionsPageProps) {
   const products = await getProducts();
@@ -37,11 +40,16 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
     );
   }
 
-  // Live accurate counts based on actual Shopify products
-  const clothingCount = products.filter((p) => p.category === 'clothing').length;
-  const shoesCount = products.filter((p) => p.category === 'shoes').length;
-  const watchesCount = products.filter((p) => p.category === 'watches').length;
-  const accessoriesCount = products.filter((p) => p.category === 'accessories').length;
+  // Live accurate products & counts based on actual Shopify collection membership
+  const clothingProducts = products.filter((p) => productMatchesCategory(p, 'clothing'));
+  const shoesProducts = products.filter((p) => productMatchesCategory(p, 'shoes'));
+  const watchesProducts = products.filter((p) => productMatchesCategory(p, 'watches'));
+  const accessoriesProducts = products.filter((p) => productMatchesCategory(p, 'accessories'));
+
+  const clothingCount = clothingProducts.length;
+  const shoesCount = shoesProducts.length;
+  const watchesCount = watchesProducts.length;
+  const accessoriesCount = accessoriesProducts.length;
 
   const categories = [
     {
@@ -54,7 +62,7 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
         'Engineered garments, heavyweight boxy tees, structural outerwear, and relaxed silhouettes crafted for form and endurance.',
       count: clothingCount,
       image:
-        products.find((p) => p.category === 'clothing' && p.images?.[0]?.src)?.images[0].src ||
+        clothingProducts.find((p) => p.images?.[0]?.src)?.images[0].src ||
         PRODUCTS.find((p) => p.category === 'clothing')?.images[0]?.src ||
         '',
     },
@@ -68,7 +76,7 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
         'Sculpted Vibram lug-sole combat boots, minimalist derby trainers, and tactical slip-ons built with artisanal craftsmanship.',
       count: shoesCount,
       image:
-        products.find((p) => p.category === 'shoes' && p.images?.[0]?.src)?.images[0].src ||
+        shoesProducts.find((p) => p.images?.[0]?.src)?.images[0].src ||
         PRODUCTS.find((p) => p.category === 'shoes')?.images[0]?.src ||
         '',
     },
@@ -82,7 +90,7 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
         'Grade 5 Titanium chronographs, automatic mechanical field timepieces, and anti-reflective sapphire dials engineered to endure.',
       count: watchesCount,
       image:
-        products.find((p) => p.category === 'watches' && p.images?.[0]?.src)?.images[0].src ||
+        watchesProducts.find((p) => p.images?.[0]?.src)?.images[0].src ||
         PRODUCTS.find((p) => p.category === 'watches')?.images[0]?.src ||
         '',
     },
@@ -96,7 +104,7 @@ export default async function CollectionsPage({ searchParams }: CollectionsPageP
         'Solid 925 sterling silver curb chains, ballistic cordura modular accessories, and everyday brutalist carry essentials.',
       count: accessoriesCount,
       image:
-        products.find((p) => p.category === 'accessories' && p.images?.[0]?.src)?.images[0].src ||
+        accessoriesProducts.find((p) => p.images?.[0]?.src)?.images[0].src ||
         PRODUCTS.find((p) => p.category === 'accessories')?.images[0]?.src ||
         '',
     },

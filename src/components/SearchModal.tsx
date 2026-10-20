@@ -12,7 +12,7 @@ interface SearchModalProps {
 
 export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
   const [query, setQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [results, setResults] = useState<Product[]>([]);
 
   useEffect(() => {
@@ -22,9 +22,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
         .then((data) => {
           if (data.products && data.products.length > 0) {
             setProducts(data.products);
+          } else if (!data.isLiveShopify) {
+            setProducts(PRODUCTS);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setProducts(PRODUCTS);
+        });
     }
   }, [isOpen]);
 

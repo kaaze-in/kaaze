@@ -42,6 +42,22 @@ export interface ProductVariant {
   image?: { url: string; altText?: string };
 }
 
+export interface ProductCollectionRef {
+  id: string;
+  title: string;
+  handle: string;
+}
+
+export interface ShopifyCollectionItem {
+  id: string;
+  title: string;
+  handle: string;
+  description?: string;
+  productCount: number;
+  productHandles: string[];
+  imageUrl?: string;
+}
+
 export interface Product {
   id: string;
   handle: string;
@@ -54,6 +70,8 @@ export interface Product {
   compareAtPrice?: number;
   discountBadge?: string;
   category: 'clothing' | 'shoes' | 'watches' | 'accessories';
+  collections?: ProductCollectionRef[];
+  collectionHandles?: string[];
   collectionTag?: string;
   seriesTag?: string;
   stockStatus: string;

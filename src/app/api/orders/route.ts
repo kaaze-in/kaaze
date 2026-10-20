@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Order, OrderItem } from '@/types';
 import { getSupabase } from '@/lib/supabase';
+import { getShopifyDomain } from '@/lib/shopify';
 
 const rawStoreDomain = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN || '';
 const SHOPIFY_STORE_DOMAIN = rawStoreDomain.replace(/^https?:\/\//i, '').replace(/\/+$/, '').trim();
@@ -137,7 +138,8 @@ export async function GET(request: NextRequest) {
   `;
 
   try {
-    const endpoint = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+    const activeDomain = getShopifyDomain() || SHOPIFY_STORE_DOMAIN;
+    const endpoint = `https://${activeDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
